@@ -64,7 +64,10 @@ Instruction decode_instruction(string binary) { // instruction read from file
         Instruction.rd = binary.substr(20,5);
         Instruction.funct3 = binary.substr(17,3);
         
-        if (Instruction.opcode == "I") {
+        if (Instruction.opcode == "J" && Instruction.rd == "00000") {
+            Instruction.rs1 = "00000";
+            Instruction.rs2 = "00000";
+        } else if (Instruction.opcode == "I") {
             if (Instruction.funct3 == "001" || Instruction.funct3 == "101") { // if Instruction is I-type and slli, srli, srai
                 Instruction.rs1 = binary.substr(12,5);
                 Instruction.rs2 = binary.substr(7,5);
@@ -82,35 +85,39 @@ Instruction decode_instruction(string binary) { // instruction read from file
 }
 
 void resolve_data_conflicts(const vector<Instruction>& instructions, vector<Instruction>& resolved_instructions) {
-    int has_conflict = false;
+    bool has_conflict = false;
+    bool next_has_conflict = false;
+    
+    Instruction nop;
+    nop.full_instruction = "00000000000000000000000000010011";
 
     for (int i = 0; i < instructions.size() - 1; i++) {
         resolved_instructions.push_back(instructions[i]);
         has_conflict = false;
+        next_has_conflict = false;
 
-        if(instructions[i + 1].opcode == "I"){
-            if (instructions[i].rd == instructions[i + 1].rs1) { // checking if the next instruction has conflict
-                has_conflict = true;
-                Instruction nop;
-                nop.full_instruction = "00000000000000000000000000110011";
-                resolved_instructions.push_back(nop); // 2 nops to complete 2 cycles before next instruction)
-                resolved_instructions.push_back(nop);
-            } else if (!has_conflict && instructions[i].rd == instructions[i + 2].rs1) { // checking if subsequent instruction has conflict
-                Instruction nop;
-                nop.full_instruction = "00000000000000000000000000110011";
-                resolved_instructions.push_back(nop); // 1 nop for subsequent instrucion (1 nop + 1 instruction = 2 cycles)
+        if(instructions[i].rd != "00000"){
+
+            if(instructions[i + 1].rd == instructions[i + 2].rs1 || instructions[i + 1].rd == instructions[i + 2].rs2){
+                next_has_conflict = true;
             }
-        } else { // R etc
-            if (instructions[i].rd == instructions[i+1].rs1 || instructions[i].rd == instructions[i+1].rs2) { // checking if the next instruction has conflict
-                has_conflict = true;
-                Instruction nop;
-                nop.full_instruction = "00000000000000000000000000110011";
-                resolved_instructions.push_back(nop); // 2 nops to complete 2 cycles before next instruction)
-                resolved_instructions.push_back(nop);
-            } else if (!has_conflict && instructions[i].rd == instructions[i+2].rs1 || instructions[i].rd == instructions[i+2].rs2) { // checking if subsequent instruction has conflict
-                Instruction nop;
-                nop.full_instruction = "00000000000000000000000000110011";
-                resolved_instructions.push_back(nop); // 1 nop for subsequent instrucion (1 nop + 1 instruction = 2 cycles)
+
+            if(instructions[i + 1].opcode == "I"){
+                if (instructions[i].rd == instructions[i + 1].rs1) { // checking if the next instruction has conflict
+                    has_conflict = true;
+                    resolved_instructions.push_back(nop); // 2 nops to complete 2 cycles before next instruction)
+                    resolved_instructions.push_back(nop);
+                } else if (!next_has_conflict && !has_conflict && instructions[i].rd == instructions[i + 2].rs1) { // checking if subsequent instruction has conflict
+                    resolved_instructions.push_back(nop); // 1 nop for subsequent instrucion (1 nop + 1 instruction = 2 cycles)
+                }
+            } else { // R etc
+                if (instructions[i].rd == instructions[i + 1].rs1 || instructions[i].rd == instructions[i + 1].rs2) { // checking if the next instruction has conflict
+                    has_conflict = true;
+                    resolved_instructions.push_back(nop); // 2 nops to complete 2 cycles before next instruction)
+                    resolved_instructions.push_back(nop);
+                } else if (!next_has_conflict && !has_conflict && (instructions[i].rd == instructions[i + 2].rs1 || instructions[i].rd == instructions[i + 2].rs2)) { // checking if subsequent instruction has conflict
+                    resolved_instructions.push_back(nop); // 1 nop for subsequent instrucion (1 nop + 1 instruction = 2 cycles)
+                }
             }
         }
     }
@@ -140,7 +147,7 @@ void read_file(string& input_file, vector<Instruction>& instructions) {
 }
 
 int main() {
-    string input_file = "dumpfile.txt";
+    string input_file = "dumpfile5.txt";
 
     vector<Instruction> instructions;
     vector<Instruction> resolved_instructions;
